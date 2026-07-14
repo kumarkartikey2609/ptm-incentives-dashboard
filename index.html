@@ -302,10 +302,23 @@
   .partner-card .plnum{color:var(--text-dim);font-size:13px;margin-bottom:18px;}
   .stat-grid{
     display:grid;
-    grid-template-columns:repeat(3,1fr);
+    grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
     gap:12px;
     margin-bottom:18px;
   }
+  .dc-search-row{display:flex;gap:10px;margin-bottom:16px;}
+  .dc-search-row input{
+    flex:1;
+    padding:12px 14px;
+    border-radius:10px;
+    border:1px solid var(--border);
+    background:var(--card-2);
+    font-size:14px;
+    color:var(--text);
+    outline:none;
+  }
+  .dc-search-row input:focus{border-color:var(--accent);background:#fff;}
+  .dc-hint{color:var(--text-dim);font-size:13px;margin:-8px 0 16px;}
   .stat-box{
     background:#fff;
     border:1px solid var(--border);
@@ -384,9 +397,32 @@
           <div class="stat-label">Month Incentive</div>
           <div class="stat-value" id="pIncentive">—</div>
         </div>
+        <div class="stat-box">
+          <div class="stat-label">Tips (This Month)</div>
+          <div class="stat-value" id="pTips">—</div>
+        </div>
       </div>
       <div class="perf-message" id="pMessage"></div>
     </div>
+  </div>
+
+  <div class="eyebrow">By collection center</div>
+  <h2>DC Leaderboard</h2>
+  <p class="section-desc">Search a DC name to see its top 5 incentive earners for the selected month.</p>
+  <div class="card">
+    <div class="dc-search-row">
+      <input type="text" id="dcSearchInput" list="dcNameList" placeholder="Search by DC Name (e.g. Aarid, Yasmeen 2)" autocomplete="off">
+    </div>
+    <datalist id="dcNameList"></datalist>
+    <div class="dc-hint" id="dcHint">Loading latest data…</div>
+    <div class="month-tabs" id="dcMonthTabs"></div>
+    <table>
+      <thead>
+        <tr><th>#</th><th>Partner</th><th>Rating</th><th>Rebookings</th><th>Total SD</th><th style="text-align:right;">Incentive</th></tr>
+      </thead>
+      <tbody id="dcLeaderboard"></tbody>
+    </table>
+    <div id="dcLeaderboardNote" style="margin-top:14px;font-size:12px;color:var(--text-dim);"></div>
   </div>
 
   <div class="eyebrow">For new &amp; prospective pros</div>
@@ -493,6 +529,11 @@
   let activeMonth = null;
   let dataLoaded = false;
   let dataLoadError = false;
+  let ALL_MONTH_DATA = {};
+  let DC_TOP5_BY_MONTH = {};
+  let DC_NAMES = [];
+  let dcActiveMonth = null;
+  let dcActiveDc = null;
 
   function parseCSV(text) {
     // Minimal CSV parser with quoted-field support (handles commas inside quotes).
@@ -533,9 +574,12 @@
           month: header.indexOf('month'),
           n: header.indexOf('provider_name'),
           l: header.indexOf('l_number'),
+          dc: header.indexOf('dc_name'),
           r: header.indexOf('rating'),
           b: header.indexOf('rebookings'),
+          sd: header.indexOf('total_sd'),
           i: header.indexOf('incentive_amount'),
+          t: header.indexOf('tips'),
         };
         if (idx.month === -1 || idx.n === -1) throw new Error('data.csv is missing required columns (month, provider_name, ...)');
 
@@ -551,9 +595,12 @@
           byMonth[month].push({
             n: (cols[idx.n] || '').trim(),
             l: (cols[idx.l] || '').trim() || null,
+            dc: idx.dc === -1 ? '' : (cols[idx.dc] || '').trim(),
             r: ratingRaw === '' ? null : parseFloat(ratingRaw),
             b: parseInt((cols[idx.b] || '0').trim(), 10) || 0,
+            sd: idx.sd === -1 ? 0 : (parseInt((cols[idx.sd] || '0').trim(), 10) || 0),
             i: parseInt((cols[idx.i] || '0').trim(), 10) || 0,
+            t: idx.t === -1 ? 0 : (parseInt((cols[idx.t] || '0').trim(), 10) || 0),
           });
         }
         if (!order.length) throw new Error('data.csv had no valid rows');
@@ -565,9 +612,19 @@
         });
         PARTNERS = byMonth[order[0]];
         activeMonth = order[0];
+        ALL_MONTH_DATA = byMonth;
+        DC_TOP5_BY_MONTH = buildDcTop5(byMonth, order);
+        DC_NAMES = Array.from(new Set(
+          order.flatMap(m => byMonth[m].map(p => p.dc).filter(Boolean))
+        )).sort((a, b) => a.localeCompare(b));
+        dcActiveMonth = order[0];
         dataLoaded = true;
 
         document.querySelector('.search-hint').textContent = `Showing current month (${order[0]}) data.`;
+        const dl = document.getElementById('dcNameList');
+        if (dl) dl.innerHTML = DC_NAMES.map(d => `<option value="${d}"></option>`).join('');
+        const dcHint = document.getElementById('dcHint');
+        if (dcHint) dcHint.textContent = 'Type a DC name to see its top 5 earners.';
       })
       .catch(err => {
         dataLoadError = true;
@@ -575,7 +632,27 @@
         const note = document.getElementById('leaderboardNote');
         if (note) note.textContent = `Couldn't load data.csv: ${err.message}. Upload a data.csv file (see comment in source) to this repo to populate the dashboard.`;
         document.querySelector('.search-hint').textContent = 'Data not available yet — check back after the next refresh.';
+        const dcHint = document.getElementById('dcHint');
+        if (dcHint) dcHint.textContent = 'Data not available yet — check back after the next refresh.';
       });
+  }
+
+  function buildDcTop5(byMonth, order) {
+    const result = {};
+    order.forEach(m => {
+      const byDc = {};
+      (byMonth[m] || []).forEach(p => {
+        if (!p.dc) return;
+        if (!byDc[p.dc]) byDc[p.dc] = [];
+        byDc[p.dc].push(p);
+      });
+      const dcResult = {};
+      Object.keys(byDc).forEach(dc => {
+        dcResult[dc] = byDc[dc].slice().sort((a, b) => b.i - a.i).slice(0, 5);
+      });
+      result[m] = dcResult;
+    });
+    return result;
   }
 
   function renderMonthTabs() {
@@ -616,29 +693,31 @@
     return { rate: tier.rate, amount: tier.rate * rebookings, eligible: true };
   }
 
-  function performanceMessage(rating, rebookings) {
+  function performanceMessage(rating, rebookings, tips) {
     const potential = rebookings * 10;
+    const tipsAmt = tips || 0;
+    const tipsNote = tipsAmt > 0 ? ` Plus SAR ${tipsAmt.toLocaleString()} in tips this month — nice work.` : '';
     if (rating === null || rating === undefined || rating < 4.80) {
       return {
         cls: 'low',
-        text: "Keep working hard and delight your customers. Improve your rating to 4.80 or above to become eligible for the Rebooking Incentive Program."
+        text: "Keep working hard and delight your customers. Improve your rating to 4.80 or above to become eligible for the Rebooking Incentive Program." + tipsNote
       };
     }
     if (rating >= 4.80 && rating <= 4.84) {
       return {
         cls: 'mid',
-        text: `You're close! If you improve your rating to 4.95, you could earn SAR ${potential.toLocaleString()} this month. Keep delivering excellent service to maximize your incentive.`
+        text: `You're close! If you improve your rating to 4.95, you could earn SAR ${potential.toLocaleString()} this month. Keep delivering excellent service to maximize your incentive.${tipsNote}`
       };
     }
     if (rating >= 4.85 && rating < 4.95) {
       return {
         cls: 'good',
-        text: `Great work! If you reach and maintain a 4.95+ rating, your potential earning this month would be SAR ${potential.toLocaleString()}.`
+        text: `Great work! If you reach and maintain a 4.95+ rating, your potential earning this month would be SAR ${potential.toLocaleString()}.${tipsNote}`
       };
     }
     return {
       cls: 'top',
-      text: `Excellent! You're currently in the highest incentive tier. Based on your current month's rebooking count, your incentive is SAR ${potential.toLocaleString()}. Keep up the outstanding performance!`
+      text: `Excellent! You're currently in the highest incentive tier. Based on your current month's rebooking count, your incentive is SAR ${potential.toLocaleString()}.${tipsNote} Keep up the outstanding performance!`
     };
   }
 
@@ -658,8 +737,9 @@
 
     const inc = computeIncentive(p.r, p.b);
     document.getElementById('pIncentive').textContent = 'SAR ' + inc.amount.toLocaleString();
+    document.getElementById('pTips').textContent = 'SAR ' + (p.t || 0).toLocaleString();
 
-    const msg = performanceMessage(p.r, p.b);
+    const msg = performanceMessage(p.r, p.b, p.t);
     const msgEl = document.getElementById('pMessage');
     msgEl.className = 'perf-message ' + msg.cls;
     msgEl.textContent = msg.text;
@@ -707,9 +787,70 @@
     if (e.key === 'Enter') runSearch();
   });
 
+  function renderDcMonthTabs() {
+    const el = document.getElementById('dcMonthTabs');
+    el.innerHTML = MONTH_ORDER.map(m =>
+      `<button class="month-tab${m === dcActiveMonth ? ' active' : ''}" data-month="${m}">${m}</button>`
+    ).join('');
+    el.querySelectorAll('.month-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        dcActiveMonth = btn.dataset.month;
+        renderDcMonthTabs();
+        renderDcLeaderboard();
+      });
+    });
+  }
+
+  function renderDcLeaderboard() {
+    const body = document.getElementById('dcLeaderboard');
+    const note = document.getElementById('dcLeaderboardNote');
+    if (!body || !note) return;
+    if (!dcActiveDc) {
+      body.innerHTML = '';
+      note.textContent = 'Search a DC name above to see its top 5 earners.';
+      return;
+    }
+    const rows = (DC_TOP5_BY_MONTH[dcActiveMonth] && DC_TOP5_BY_MONTH[dcActiveMonth][dcActiveDc]) || [];
+    if (!rows.length) {
+      body.innerHTML = '';
+      note.textContent = `No data found for "${dcActiveDc}" in ${dcActiveMonth}.`;
+      return;
+    }
+    body.innerHTML = rows.map((p, i) => `
+      <tr>
+        <td class="rank${i === 0 ? ' gold' : ''}">${i + 1}</td>
+        <td>${p.n}</td>
+        <td class="rating">${(p.r ?? 0).toFixed(2)} ★</td>
+        <td>${p.b}</td>
+        <td>${p.sd}</td>
+        <td class="earn">SAR ${p.i.toLocaleString()}</td>
+      </tr>
+    `).join('');
+    note.textContent = `Top ${rows.length} earners · ${dcActiveDc} · ${dcActiveMonth}`;
+  }
+
+  function findDcName(query) {
+    const q = query.trim().toLowerCase();
+    if (!q) return null;
+    let match = DC_NAMES.find(d => d.toLowerCase() === q);
+    if (!match) match = DC_NAMES.find(d => d.toLowerCase().includes(q));
+    return match || null;
+  }
+
+  const dcSearchInput = document.getElementById('dcSearchInput');
+  if (dcSearchInput) {
+    dcSearchInput.addEventListener('input', (e) => {
+      if (!dataLoaded) return;
+      dcActiveDc = findDcName(e.target.value);
+      renderDcLeaderboard();
+    });
+  }
+
   loadData().then(() => {
     renderMonthTabs();
     renderLeaderboard();
+    renderDcMonthTabs();
+    renderDcLeaderboard();
   });
 </script>
 </body>
