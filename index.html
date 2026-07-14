@@ -335,7 +335,7 @@
 
   <div class="eyebrow">Hall of fame</div>
   <h2>Top 10 Performers</h2>
-  <p class="section-desc">Ranked by incentive earnings — the best-rated, most-rebooked partners rise to the top. Data is loaded from a manually uploaded data.csv — no automated data pulls.</p>
+  <p class="section-desc">Ranked by incentive earnings — the best-rated, most-rebooked partners rise to the top. Auto-refreshed daily from Jarvis query #547759.</p>
   <div class="month-tabs" id="monthTabs"></div>
   <div class="card">
     <table>
@@ -355,7 +355,7 @@
       <input type="text" id="searchInput" placeholder="Search by Provider Name or L Number (e.g. L_198354)" autocomplete="off">
       <button id="searchBtn">Search</button>
     </div>
-    <div class="search-hint">Loading data.csv…</div>
+    <div class="search-hint">Loading latest data…</div>
     <div class="search-suggestions" id="searchSuggestions"></div>
     <div class="no-results" id="noResults">No partner found matching that name or L Number. Try a different spelling or check your L Number.</div>
 
@@ -471,7 +471,7 @@
   rebookSlider.addEventListener('input', update);
   update();
 
-  // ---------- Data source: data.csv (manually uploaded, no automated scraping) ----------
+  // ---------- Data source: data.csv (auto-refreshed daily from Jarvis query #547759) ----------
   // Upload a new data.csv to this repo to refresh the numbers below. CSV columns:
   // month,provider_name,l_number,rating,rebookings,incentive_amount
   // Put the CURRENT month's full roster first (every partner), then just the top rows
@@ -558,14 +558,14 @@
         activeMonth = order[0];
         dataLoaded = true;
 
-        document.querySelector('.search-hint').textContent = `Showing current month (${order[0]}) data, from the uploaded data.csv.`;
+        document.querySelector('.search-hint').textContent = `Showing current month (${order[0]}) data.`;
       })
       .catch(err => {
         dataLoadError = true;
         console.error(err);
         const note = document.getElementById('leaderboardNote');
         if (note) note.textContent = `Couldn't load data.csv: ${err.message}. Upload a data.csv file (see comment in source) to this repo to populate the dashboard.`;
-        document.querySelector('.search-hint').textContent = 'No data.csv found yet — search will work once one is uploaded.';
+        document.querySelector('.search-hint').textContent = 'Data not available yet — check back after the next refresh.';
       });
   }
 
@@ -597,7 +597,7 @@
     `).join('');
 
     const noteEl = document.getElementById('leaderboardNote');
-    if (noteEl) noteEl.textContent = `Source: data.csv (manually uploaded) · ${activeMonth}`;
+    if (noteEl) noteEl.textContent = `Source: Jarvis query #547759 · ${activeMonth} · refreshed daily at 11:00`;
   }
 
   function computeIncentive(rating, rebookings) {
