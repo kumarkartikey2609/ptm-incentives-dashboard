@@ -1,6 +1,6 @@
 # PTM Incentives Dashboard
 
-[![visit count](https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fkumarkartikey2609.github.io%2Fptm-incentives-dashboard%2F&count_bg=%237C1FD6&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=visits&edge_flat=false)](https://kumarkartikey2609.github.io/ptm-incentives-dashboard/)
+[![visit count](https://api.visitorbadge.io/api/visitors?path=kumarkartikey2609%2Fptm-incentives-dashboard&label=visits&countColor=%237C1FD6&style=flat)](https://kumarkartikey2609.github.io/ptm-incentives-dashboard/)
 
 Live dashboard: **https://kumarkartikey2609.github.io/ptm-incentives-dashboard/**
 
