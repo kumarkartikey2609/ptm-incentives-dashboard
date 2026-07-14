@@ -335,7 +335,7 @@
 
   <div class="eyebrow">Hall of fame</div>
   <h2>Top 10 Performers</h2>
-  <p class="section-desc">Ranked by incentive earnings — the best-rated, most-rebooked partners rise to the top. Auto-refreshed daily from Jarvis query #547759.</p>
+  <p class="section-desc">Ranked by incentive earnings — the best-rated, most-rebooked partners rise to the top.</p>
   <div class="month-tabs" id="monthTabs"></div>
   <div class="card">
     <table>
@@ -597,7 +597,7 @@
     `).join('');
 
     const noteEl = document.getElementById('leaderboardNote');
-    if (noteEl) noteEl.textContent = `Source: Jarvis query #547759 · ${activeMonth} · refreshed daily at 11:00`;
+    if (noteEl) noteEl.textContent = activeMonth;
   }
 
   function computeIncentive(rating, rebookings) {
