@@ -371,7 +371,8 @@
 
   <div class="eyebrow">Look yourself up</div>
   <h2>Partner Search</h2>
-  <p class="section-desc">Search by your name or L Number to see your current month rating, rebookings, and incentive earnings.</p>
+  <p class="section-desc">Search by your name or L Number to see your rating, rebookings, and incentive earnings for the selected month.</p>
+  <div class="month-tabs" id="searchMonthTabs"></div>
   <div class="card">
     <div class="search-row">
       <input type="text" id="searchInput" placeholder="Search by Provider Name or L Number (e.g. L_198354)" autocomplete="off">
@@ -390,15 +391,15 @@
           <div class="stat-value" id="pRating">—</div>
         </div>
         <div class="stat-box">
-          <div class="stat-label">Rebookings (This Month)</div>
+          <div class="stat-label">Rebookings</div>
           <div class="stat-value" id="pRebookings">—</div>
         </div>
         <div class="stat-box">
-          <div class="stat-label">Month Incentive</div>
+          <div class="stat-label">Incentive</div>
           <div class="stat-value" id="pIncentive">—</div>
         </div>
         <div class="stat-box">
-          <div class="stat-label">Tips (This Month)</div>
+          <div class="stat-label">Tips</div>
           <div class="stat-value" id="pTips">—</div>
         </div>
       </div>
@@ -409,13 +410,13 @@
   <div class="eyebrow">By collection center</div>
   <h2>DC Leaderboard</h2>
   <p class="section-desc">Search a DC name to see its top 5 incentive earners for the selected month.</p>
+  <div class="month-tabs" id="dcMonthTabs"></div>
   <div class="card">
     <div class="dc-search-row">
       <input type="text" id="dcSearchInput" list="dcNameList" placeholder="Search by DC Name (e.g. Aarid, Yasmeen 2)" autocomplete="off">
     </div>
     <datalist id="dcNameList"></datalist>
     <div class="dc-hint" id="dcHint">Loading latest data…</div>
-    <div class="month-tabs" id="dcMonthTabs"></div>
     <table>
       <thead>
         <tr><th>#</th><th>Partner</th><th>Rating</th><th>Rebookings</th><th>Total SD</th><th style="text-align:right;">Incentive</th></tr>
@@ -516,16 +517,14 @@
   rebookSlider.addEventListener('input', update);
   update();
 
-  // ---------- Data source: data.csv (auto-refreshed daily from Jarvis query #547759) ----------
-  // Upload a new data.csv to this repo to refresh the numbers below. CSV columns:
-  // month,provider_name,l_number,rating,rebookings,incentive_amount
-  // Put the CURRENT month's full roster first (every partner), then just the top rows
-  // for older months is fine too -- only the first month found needs to be a full roster,
-  // since that's the one used for Partner Search. Whichever month appears first in the
-  // file becomes the "current month" tab and the search dataset.
+  // ---------- Data source: data.csv (uploaded manually once a month) ----------
+  // Update data.csv to refresh the numbers below. CSV columns:
+  // month,provider_name,l_number,dc_name,rating,rebookings,total_sd,incentive_amount,tips
+  // Upload the full roster (every partner) for each month you want available. The
+  // dashboard shows whichever last 3 months' data is present in the file, and each
+  // tile (Top 10, Partner Search, DC Leaderboard) has its own month filter.
   let TOP10_BY_MONTH = {};
   let MONTH_ORDER = [];
-  let PARTNERS = [];
   let activeMonth = null;
   let dataLoaded = false;
   let dataLoadError = false;
@@ -534,6 +533,7 @@
   let DC_NAMES = [];
   let dcActiveMonth = null;
   let dcActiveDc = null;
+  let searchActiveMonth = null;
 
   function parseCSV(text) {
     // Minimal CSV parser with quoted-field support (handles commas inside quotes).
@@ -610,7 +610,6 @@
         order.forEach(m => {
           TOP10_BY_MONTH[m] = byMonth[m].slice().sort((a, b) => b.i - a.i).slice(0, 10);
         });
-        PARTNERS = byMonth[order[0]];
         activeMonth = order[0];
         ALL_MONTH_DATA = byMonth;
         DC_TOP5_BY_MONTH = buildDcTop5(byMonth, order);
@@ -618,9 +617,10 @@
           order.flatMap(m => byMonth[m].map(p => p.dc).filter(Boolean))
         )).sort((a, b) => a.localeCompare(b));
         dcActiveMonth = order[0];
+        searchActiveMonth = order[0];
         dataLoaded = true;
 
-        document.querySelector('.search-hint').textContent = `Showing current month (${order[0]}) data.`;
+        document.querySelector('.search-hint').textContent = `Showing ${order[0]} data. Use the tabs above to switch months.`;
         const dl = document.getElementById('dcNameList');
         if (dl) dl.innerHTML = DC_NAMES.map(d => `<option value="${d}"></option>`).join('');
         const dcHint = document.getElementById('dcHint');
@@ -631,9 +631,9 @@
         console.error(err);
         const note = document.getElementById('leaderboardNote');
         if (note) note.textContent = `Couldn't load data.csv: ${err.message}. Upload a data.csv file (see comment in source) to this repo to populate the dashboard.`;
-        document.querySelector('.search-hint').textContent = 'Data not available yet — check back after the next refresh.';
+        document.querySelector('.search-hint').textContent = 'Data not available yet — check back after the next monthly upload.';
         const dcHint = document.getElementById('dcHint');
-        if (dcHint) dcHint.textContent = 'Data not available yet — check back after the next refresh.';
+        if (dcHint) dcHint.textContent = 'Data not available yet — check back after the next monthly upload.';
       });
   }
 
@@ -717,14 +717,15 @@
     }
     return {
       cls: 'top',
-      text: `Excellent! You're currently in the highest incentive tier. Based on your current month's rebooking count, your incentive is SAR ${potential.toLocaleString()}.${tipsNote} Keep up the outstanding performance!`
+      text: `Excellent! You're in the highest incentive tier. Based on this month's rebooking count, your incentive is SAR ${potential.toLocaleString()}.${tipsNote} Keep up the outstanding performance!`
     };
   }
 
   function findPartners(query) {
     const q = query.trim().toLowerCase();
     if (!q) return [];
-    return PARTNERS.filter(p =>
+    const partners = ALL_MONTH_DATA[searchActiveMonth] || [];
+    return partners.filter(p =>
       p.n.toLowerCase().includes(q) || (p.l && p.l.toLowerCase().includes(q))
     ).slice(0, 8);
   }
@@ -786,6 +787,25 @@
   document.getElementById('searchInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') runSearch();
   });
+
+  function renderSearchMonthTabs() {
+    const el = document.getElementById('searchMonthTabs');
+    if (!el) return;
+    el.innerHTML = MONTH_ORDER.map(m =>
+      `<button class="month-tab${m === searchActiveMonth ? ' active' : ''}" data-month="${m}">${m}</button>`
+    ).join('');
+    el.querySelectorAll('.month-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        searchActiveMonth = btn.dataset.month;
+        renderSearchMonthTabs();
+        document.querySelector('.search-hint').textContent = `Showing ${searchActiveMonth} data. Use the tabs above to switch months.`;
+        hideSuggestions();
+        document.getElementById('partnerCard').classList.remove('show');
+        document.getElementById('noResults').classList.remove('show');
+        if (document.getElementById('searchInput').value.trim()) runSearch();
+      });
+    });
+  }
 
   function renderDcMonthTabs() {
     const el = document.getElementById('dcMonthTabs');
@@ -849,6 +869,7 @@
   loadData().then(() => {
     renderMonthTabs();
     renderLeaderboard();
+    renderSearchMonthTabs();
     renderDcMonthTabs();
     renderDcLeaderboard();
   });
