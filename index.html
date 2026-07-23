@@ -362,7 +362,7 @@
   <div class="card">
     <table>
       <thead>
-        <tr><th>#</th><th>Partner</th><th>Rating</th><th>Rebookings</th><th style="text-align:right;">Incentive</th></tr>
+        <tr><th>#</th><th>Partner</th><th>Rating</th><th>Rebookings</th><th style="text-align:right;">Incentive (Incentive+WNA+Tips)</th></tr>
       </thead>
       <tbody id="leaderboard"></tbody>
     </table>
@@ -395,7 +395,7 @@
           <div class="stat-value" id="pRebookings">—</div>
         </div>
         <div class="stat-box">
-          <div class="stat-label">Incentive</div>
+          <div class="stat-label">Incentive+WNA</div>
           <div class="stat-value" id="pIncentive">—</div>
         </div>
         <div class="stat-box">
@@ -419,7 +419,7 @@
     <div class="dc-hint" id="dcHint">Loading latest data…</div>
     <table>
       <thead>
-        <tr><th>#</th><th>Partner</th><th>Rating</th><th>Rebookings</th><th>Total SD</th><th style="text-align:right;">Incentive</th></tr>
+        <tr><th>#</th><th>Partner</th><th>Rating</th><th>Rebookings</th><th>Total SD</th><th style="text-align:right;">Incentive (Incentive+WNA+Tips)</th></tr>
       </thead>
       <tbody id="dcLeaderboard"></tbody>
     </table>
@@ -535,6 +535,12 @@
   let dcActiveDc = null;
   let searchActiveMonth = null;
 
+  // Top 10 Performers and DC Leaderboard rank/display by combined earnings
+  // (incentive + WNA + tips). Partner Search shows incentive + WNA (tips shown separately).
+  function totalEarn(p) {
+    return (p.i || 0) + (p.w || 0) + (p.t || 0);
+  }
+
   function parseCSV(text) {
     // Minimal CSV parser with quoted-field support (handles commas inside quotes).
     const rows = [];
@@ -580,6 +586,7 @@
           sd: header.indexOf('total_sd'),
           i: header.indexOf('incentive_amount'),
           t: header.indexOf('tips'),
+          w: header.indexOf('wna_amount'),
         };
         if (idx.month === -1 || idx.n === -1) throw new Error('data.csv is missing required columns (month, provider_name, ...)');
 
@@ -601,6 +608,7 @@
             sd: idx.sd === -1 ? 0 : (parseInt((cols[idx.sd] || '0').trim(), 10) || 0),
             i: parseInt((cols[idx.i] || '0').trim(), 10) || 0,
             t: idx.t === -1 ? 0 : (parseInt((cols[idx.t] || '0').trim(), 10) || 0),
+            w: idx.w === -1 ? 0 : (parseInt((cols[idx.w] || '0').trim(), 10) || 0),
           });
         }
         if (!order.length) throw new Error('data.csv had no valid rows');
@@ -608,7 +616,7 @@
         MONTH_ORDER = order;
         TOP10_BY_MONTH = {};
         order.forEach(m => {
-          TOP10_BY_MONTH[m] = byMonth[m].slice().sort((a, b) => b.i - a.i).slice(0, 10);
+          TOP10_BY_MONTH[m] = byMonth[m].slice().sort((a, b) => totalEarn(b) - totalEarn(a)).slice(0, 10);
         });
         activeMonth = order[0];
         ALL_MONTH_DATA = byMonth;
@@ -648,7 +656,7 @@
       });
       const dcResult = {};
       Object.keys(byDc).forEach(dc => {
-        dcResult[dc] = byDc[dc].slice().sort((a, b) => b.i - a.i).slice(0, 5);
+        dcResult[dc] = byDc[dc].slice().sort((a, b) => totalEarn(b) - totalEarn(a)).slice(0, 5);
       });
       result[m] = dcResult;
     });
@@ -670,7 +678,7 @@
   }
 
   function renderLeaderboard() {
-    const rows = (TOP10_BY_MONTH[activeMonth] || []).slice().sort((a, b) => b.i - a.i);
+    const rows = (TOP10_BY_MONTH[activeMonth] || []).slice().sort((a, b) => totalEarn(b) - totalEarn(a));
     const body = document.getElementById('leaderboard');
     body.innerHTML = rows.map((p, i) => `
       <tr>
@@ -678,7 +686,7 @@
         <td>${p.n}</td>
         <td class="rating">${(p.r ?? 0).toFixed(2)} ★</td>
         <td>${p.b}</td>
-        <td class="earn">SAR ${p.i.toLocaleString()}</td>
+        <td class="earn">SAR ${totalEarn(p).toLocaleString()}</td>
       </tr>
     `).join('');
 
@@ -693,31 +701,33 @@
     return { rate: tier.rate, amount: tier.rate * rebookings, eligible: true };
   }
 
-  function performanceMessage(rating, rebookings, tips) {
+  function performanceMessage(rating, rebookings, tips, wna) {
     const potential = rebookings * 10;
     const tipsAmt = tips || 0;
+    const wnaAmt = wna || 0;
     const tipsNote = tipsAmt > 0 ? ` Plus SAR ${tipsAmt.toLocaleString()} in tips this month — nice work.` : '';
+    const wnaNote = wnaAmt > 0 ? ` You're also earning SAR ${wnaAmt.toLocaleString()} in WNA this month.` : '';
     if (rating === null || rating === undefined || rating < 4.80) {
       return {
         cls: 'low',
-        text: "Keep working hard and delight your customers. Improve your rating to 4.80 or above to become eligible for the Rebooking Incentive Program." + tipsNote
+        text: "Keep working hard and delight your customers. Improve your rating to 4.80 or above to become eligible for the Rebooking Incentive Program." + wnaNote + tipsNote
       };
     }
     if (rating >= 4.80 && rating <= 4.84) {
       return {
         cls: 'mid',
-        text: `You're close! If you improve your rating to 4.95, you could earn SAR ${potential.toLocaleString()} this month. Keep delivering excellent service to maximize your incentive.${tipsNote}`
+        text: `You're close! If you improve your rating to 4.95, you could earn SAR ${potential.toLocaleString()} this month. Keep delivering excellent service to maximize your incentive.${wnaNote}${tipsNote}`
       };
     }
     if (rating >= 4.85 && rating < 4.95) {
       return {
         cls: 'good',
-        text: `Great work! If you reach and maintain a 4.95+ rating, your potential earning this month would be SAR ${potential.toLocaleString()}.${tipsNote}`
+        text: `Great work! If you reach and maintain a 4.95+ rating, your potential earning this month would be SAR ${potential.toLocaleString()}.${wnaNote}${tipsNote}`
       };
     }
     return {
       cls: 'top',
-      text: `Excellent! You're in the highest incentive tier. Based on this month's rebooking count, your incentive is SAR ${potential.toLocaleString()}.${tipsNote} Keep up the outstanding performance!`
+      text: `Excellent! You're in the highest incentive tier. Based on this month's rebooking count, your incentive is SAR ${potential.toLocaleString()}.${wnaNote}${tipsNote} Keep up the outstanding performance!`
     };
   }
 
@@ -736,11 +746,11 @@
     document.getElementById('pRating').textContent = (p.r === null || p.r === undefined) ? 'Not yet rated' : p.r.toFixed(2) + ' ★';
     document.getElementById('pRebookings').textContent = p.b;
 
-    const inc = computeIncentive(p.r, p.b);
-    document.getElementById('pIncentive').textContent = 'SAR ' + inc.amount.toLocaleString();
+    const incentiveWna = (p.i || 0) + (p.w || 0);
+    document.getElementById('pIncentive').textContent = 'SAR ' + incentiveWna.toLocaleString();
     document.getElementById('pTips').textContent = 'SAR ' + (p.t || 0).toLocaleString();
 
-    const msg = performanceMessage(p.r, p.b, p.t);
+    const msg = performanceMessage(p.r, p.b, p.t, p.w);
     const msgEl = document.getElementById('pMessage');
     msgEl.className = 'perf-message ' + msg.cls;
     msgEl.textContent = msg.text;
@@ -843,7 +853,7 @@
         <td class="rating">${(p.r ?? 0).toFixed(2)} ★</td>
         <td>${p.b}</td>
         <td>${p.sd}</td>
-        <td class="earn">SAR ${p.i.toLocaleString()}</td>
+        <td class="earn">SAR ${totalEarn(p).toLocaleString()}</td>
       </tr>
     `).join('');
     note.textContent = `Top ${rows.length} earners · ${dcActiveDc} · ${dcActiveMonth}`;
